@@ -1,0 +1,6 @@
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=AL-IDM007;Database=D1IM;Integrated Security=True;TrustServerCertificate=True;"
+  }
+}
+
