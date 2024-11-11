@@ -1,3 +1,0 @@
-{
-  "GetScripts": "SELECT Name, Description, Code FROM DialogScripts WHERE IsBlocked = 0 ORDER BY Name"
-}
