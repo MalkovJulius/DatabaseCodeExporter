@@ -14,7 +14,7 @@ namespace DatabaseCodeExporter
     {
         private readonly string rootPath;
         private readonly string folderPath;
-        //private readonly SemaphoreSlim semaphore = new SemaphoreSlim(3);
+        private readonly SemaphoreSlim semaphore = new SemaphoreSlim(3);
 
         public Exporter(string _rootPath)
         {
@@ -25,7 +25,7 @@ namespace DatabaseCodeExporter
         /// <summary>
         /// A method of extracting from a database from a specific table using
         /// </summary>
-        internal void ExportScriptsFromDB()
+        internal async Task ExportScriptsFromDBAsync()
         {
             var connectionString = new ConfigurationBuilder()
                 .SetBasePath(rootPath)
@@ -41,14 +41,15 @@ namespace DatabaseCodeExporter
             //Create the connection to DB
             using (var con = new SqlConnection(connectionString))
             {
-                con.Open();
+                await con.OpenAsync();
 
                 //Create the SQL command
                 using (var cmd = new SqlCommand(sqlQuery, con))
                 {
-                    using (var reader = cmd.ExecuteReader())
+                    using (var reader = await cmd.ExecuteReaderAsync())
                     {
-                        while (reader.Read() && !reader.IsDBNull(0))
+                        var tasks = new List<Task>();
+                        while (await reader.ReadAsync() && !reader.IsDBNull(0))
                         {
                             var scriptDto = new ScriptDTO
                             {
@@ -56,21 +57,32 @@ namespace DatabaseCodeExporter
                                 Description = reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
                                 Code = reader.IsDBNull(2) ? string.Empty : reader.GetString(2)
                             };
-                            CreateFiles(scriptDto);
+                            tasks.Add(CreateFilesAsync(scriptDto));
                         }
+                        await Task.WhenAll(tasks);
                     }
                 }
             }
         }
 
-        private void CreateFiles(ScriptDTO scriptDTO)
+        private async Task CreateFilesAsync(ScriptDTO scriptDTO)
         {
             if (scriptDTO is null) return;
 
             var fileName = Path.Combine(folderPath, scriptDTO.Name + ".vb");
-            File.WriteAllText(fileName, $"//{scriptDTO.Description}\n{scriptDTO.Code}");            
 
-            Console.WriteLine($"File {scriptDTO.Name} was created/updated");
+            await semaphore.WaitAsync();
+            try
+            {
+                if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
+
+                await File.WriteAllTextAsync(fileName, $"//{scriptDTO.Description}\n{scriptDTO.Code}");
+                Console.WriteLine($"File {scriptDTO.Name} was created/updated");
+            }
+            finally
+            {
+                semaphore.Release();
+            }            
         }
     }
 }
